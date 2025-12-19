@@ -8,9 +8,6 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 import User from "./models/User.js";
 import Session from "./models/Session.js";
 import Attendance from "./models/Attendance.js";
@@ -19,6 +16,11 @@ import authRoutes from "./routes/auth.js";
 
 dotenv.config();
 
+// ================= PATH FIX =================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ================= ENV =================
 const { PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_CLUSTER, JWT_SECRET } =
   process.env;
 
@@ -68,8 +70,8 @@ const authenticateRole = (requiredRole) => {
 };
 
 // ================= TEST =================
-app.get("/", (req, res) => {
-  res.send("Attendify Server Running");
+app.get("/api/test", (req, res) => {
+  res.json({ message: "API is working" });
 });
 
 // ================= AUTH =================
@@ -213,17 +215,18 @@ app.get("/admin/stats", authenticateRole("admin"), async (req, res) => {
 // ================= ROUTES =================
 app.use("/api/auth", authRoutes);
 
-// ================= FRONTEND =================
-app.use(express.static(path.join(__dirname, "..", "client", "build")));
+// ================= FRONTEND (PRODUCTION ONLY) =================
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "..", "client", "build")));
 
-app.get("*", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "..", "client", "build", "index.html")
-  );
-});
+  app.get("*", (req, res) => {
+    res.sendFile(
+      path.join(__dirname, "..", "client", "build", "index.html")
+    );
+  });
+}
 
 // ================= START =================
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
