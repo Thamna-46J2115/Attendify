@@ -6,7 +6,6 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import path from "path";
-import { fileURLToPath } from "url";
 
 import User from "./models/User.js";
 import Session from "./models/Session.js";
@@ -16,32 +15,30 @@ import authRoutes from "./routes/auth.js";
 
 dotenv.config();
 
-// ================= PATH FIX =================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ================= ENV =================
 const { PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_CLUSTER, JWT_SECRET } =
   process.env;
 
-// ================= MULTER =================
+// ================= MULTER SETUP =================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "public/uploads");
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
+    const uniqueName = Date.now() + "-" + file.originalname;
+    cb(null, uniqueName);
   },
 });
 const upload = multer({ storage });
 
-// ================= EXPRESS =================
+// ================= EXPRESS SETUP =================
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// serve uploaded images
 app.use("/uploads", express.static("public/uploads"));
 
-// ================= DATABASE =================
+// ================= MONGODB =================
 const mongoURI = `mongodb+srv://${DB_USER}:${DB_PASSWORD}@${DB_CLUSTER}/${DB_NAME}?retryWrites=true&w=majority`;
 
 mongoose
@@ -59,20 +56,20 @@ const authenticateRole = (requiredRole) => {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
       if (decoded.role !== requiredRole)
-        return res.status(403).json({ message: "Forbidden" });
+        return res
+          .status(403)
+          .json({ message: "Forbidden: insufficient rights" });
 
       req.user = decoded;
       next();
-    } catch {
+    } catch (err) {
       res.status(401).json({ message: "Invalid token" });
     }
   };
 };
 
 // ================= TEST =================
-app.get("/api/test", (req, res) => {
-  res.json({ message: "API is working" });
-});
+app.get("/", (req, res) => res.send("Attendify Server Running"));
 
 // ================= AUTH =================
 app.post("/registerUser", async (req, res) => {
@@ -135,7 +132,7 @@ app.put(
 
       await user.save();
       res.json(user);
-    } catch {
+    } catch (err) {
       res.status(500).json({ message: "Profile update failed" });
     }
   }
@@ -174,24 +171,44 @@ app.post(
 );
 
 app.get("/teacher/sessions", authenticateRole("teacher"), async (req, res) => {
-  const sessions = await Session.find({ teacherId: req.user.id });
-  res.json(sessions);
+  const sessions = await Session.find({ teacherId: req.user.id }).lean();
+
+  const sessionIds = sessions.map((s) => s._id);
+
+  const attendanceCounts = await Attendance.aggregate([
+    { $match: { sessionId: { $in: sessionIds } } },
+    { $group: { _id: "$sessionId", count: { $sum: 1 } } },
+  ]);
+
+  const countMap = {};
+  attendanceCounts.forEach((a) => {
+    countMap[a._id.toString()] = a.count;
+  });
+
+  const result = sessions.map((s) => ({
+    ...s,
+    students: Array(countMap[s._id.toString()] || 0),
+  }));
+
+  res.json(result);
 });
+
 
 // ================= STUDENT =================
 app.post("/student/attend", authenticateRole("student"), async (req, res) => {
   const { code } = req.body;
   const session = await Session.findOne({ code });
+
   if (!session)
     return res.status(404).json({ message: "Invalid session code" });
 
-  const exists = await Attendance.findOne({
+  const existing = await Attendance.findOne({
     studentId: req.user.id,
     sessionId: session._id,
   });
 
-  if (exists)
-    return res.status(400).json({ message: "Already attended" });
+  if (existing)
+    return res.status(400).json({ message: "Attendance already recorded" });
 
   const attendance = await Attendance.create({
     studentId: req.user.id,
@@ -200,28 +217,103 @@ app.post("/student/attend", authenticateRole("student"), async (req, res) => {
     status: "Present",
   });
 
-  res.json(attendance);
+  res.json({ message: "Attendance confirmed", attendance });
 });
+
+app.get(
+  "/student/attendance",
+  authenticateRole("student"),
+  async (req, res) => {
+    const attendance = await Attendance.find({
+      studentId: req.user.id,
+    })
+      .populate("sessionId", "name")
+      .sort({ date: -1 });
+
+    res.json(attendance);
+  }
+);
+
+app.delete(
+  "/student/attendance/:id",
+  authenticateRole("student"),
+  async (req, res) => {
+    await Attendance.findOneAndDelete({
+      _id: req.params.id,
+      studentId: req.user.id,
+    });
+    res.json({ message: "Attendance deleted" });
+  }
+);
 
 // ================= ADMIN =================
 app.get("/admin/stats", authenticateRole("admin"), async (req, res) => {
-  res.json({
-    students: await User.countDocuments({ role: "student" }),
-    teachers: await User.countDocuments({ role: "teacher" }),
-    sessions: await Session.countDocuments(),
-  });
+  const students = await User.countDocuments({ role: "student" });
+  const teachers = await User.countDocuments({ role: "teacher" });
+  const sessions = await Session.countDocuments();
+  res.json({ students, teachers, sessions });
 });
+
+app.get(
+  "/admin/system-notes",
+  authenticateRole("admin"),
+  async (req, res) => {
+    const notes = await SystemNote.find().sort({ createdAt: -1 }).limit(10);
+    res.json(notes);
+  }
+);
+
+app.get(
+  "/admin/new-users",
+  authenticateRole("admin"),
+  async (req, res) => {
+    const users = await User.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("name email role createdAt");
+    res.json(users);
+  }
+);
+
+app.get(
+  "/admin/recent-sessions",
+  authenticateRole("admin"),
+  async (req, res) => {
+    const sessions = await Session.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate("teacherId", "name");
+    res.json(sessions);
+  }
+);
+
+app.delete(
+  "/sessions/:id",
+  authenticateRole("teacher"),
+  async (req, res) => {
+    await Session.findOneAndDelete({
+      _id: req.params.id,
+      teacherId: req.user.id,
+    });
+    res.json({ message: "Deleted" });
+  }
+);
+
+app.put(
+  "/sessions/:id",
+  authenticateRole("teacher"),
+  async (req, res) => {
+    const updated = await Session.findOneAndUpdate(
+      { _id: req.params.id, teacherId: req.user.id },
+      req.body,
+      { new: true }
+    );
+    res.json(updated);
+  }
+);
 
 // ================= ROUTES =================
 app.use("/api/auth", authRoutes);
-
-// ================= FRONTEND (PRODUCTION ONLY) =================
-if (process.env.NODE_ENV === "production") {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-  
-}
 
 // ================= START =================
 app.listen(PORT, () => {
