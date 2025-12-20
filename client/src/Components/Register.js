@@ -1,9 +1,9 @@
 import "../App.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { registerUser } from "../Features/UserSlice";
-import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+
 export default function Register() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -12,16 +12,20 @@ export default function Register() {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, isError, isSuccess } = useSelector((state) => state.users);
+
+  const { isLoading, isError, isSuccess } = useSelector(
+    (state) => state.users
+  );
 
   useEffect(() => {
     if (isSuccess) {
-      navigate("/login"); // ✅ الآن آمن
+      navigate("/login");
     }
   }, [isSuccess, navigate]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
     dispatch(
       registerUser({
         name: fullName,
@@ -37,8 +41,16 @@ export default function Register() {
       <section className="register-section">
         <div className="register-card">
           <h1 className="register-title">Create Account</h1>
-          <p className="register-subtitle">Join Attendify in seconds</p>
-          {isError && <p style={{ color: "red" }}>حدث خطأ أثناء التسجيل</p>}
+          <p className="register-subtitle">
+            Join Attendify in seconds
+          </p>
+
+          {isError && (
+            <p style={{ color: "red", textAlign: "center" }}>
+              حدث خطأ أثناء التسجيل
+            </p>
+          )}
+
           <form className="register-form" onSubmit={handleSubmit}>
             <label className="form-label">
               Full Name
@@ -51,6 +63,7 @@ export default function Register() {
                 required
               />
             </label>
+
             <label className="form-label">
               Email
               <input
@@ -62,6 +75,7 @@ export default function Register() {
                 required
               />
             </label>
+
             <label className="form-label">
               Role
               <select
@@ -74,6 +88,7 @@ export default function Register() {
                 <option value="admin">Admin</option>
               </select>
             </label>
+
             <label className="form-label">
               Password
               <input
@@ -85,6 +100,7 @@ export default function Register() {
                 required
               />
             </label>
+
             <button
               type="submit"
               className="btn register-btn"
@@ -93,11 +109,12 @@ export default function Register() {
               {isLoading ? "Registering..." : "Register"}
             </button>
           </form>
+
           <p className="register-bottom-text">
             Already have an account?{" "}
-            <link href="/login" className="login-link">
+            <Link to="/login" className="login-link">
               Login
-            </link>
+            </Link>
           </p>
         </div>
       </section>
