@@ -1,0 +1,96 @@
+name: Attendify
+
+services:
+  mongo:
+    image: mongo:7.0.12
+
+    volumes:
+      - mongo_data:/data/db
+
+    ports:
+      - 27017:27017
+
+    networks:
+      - postitnet
+
+  mydb:
+    image: mysql
+
+    restart: always
+
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+
+    ports:
+      - "3306:33060"
+
+    networks:
+      - postitnet
+
+  phpmyadmin:
+    image: phpmyadmin
+
+    restart: always
+
+    ports:
+      - 8080:80
+
+    environment:
+      - PMA_ARBITRARY=1
+
+      - PMA_HOST=mydb
+
+      - PMA_PORT=3306
+
+    networks:
+      - postitnet
+
+    depends_on:
+      - mydb
+
+  server:
+    build:
+      context: ./server
+
+      dockerfile: Dockerfile
+
+    ports:
+      - 3001:3001
+
+    volumes:
+      - ./server:/app
+
+      - /app/node_modules
+
+    networks:
+      - postitnet
+
+    depends_on:
+      - mongo
+
+  client:
+    build:
+      context: ./client
+
+      dockerfile: Dockerfile
+
+    ports:
+      - 3000:3000
+
+    volumes:
+      - ./client:/app
+
+      - /app/node_modules
+
+    networks:
+      - postitnet
+
+    depends_on:
+      - server
+
+volumes:
+  mongo_data:
+
+networks:
+  postitnet:
+    driver: bridge
