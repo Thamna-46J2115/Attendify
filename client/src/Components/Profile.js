@@ -13,7 +13,6 @@ import {
   Button,
 } from "reactstrap";
 import Location from "./Location";
-
 export default function Profile() {
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.users);
@@ -143,8 +142,7 @@ export default function Profile() {
             </p>
 
             <p>
-              <strong>Joined:</strong>{" "}
-              {user.createdAt?.split("T")[0] || "N/A"}
+              <strong>Joined:</strong> {user.createdAt?.split("T")[0] || "N/A"}
             </p>
           </div>
 
@@ -194,9 +192,7 @@ export default function Profile() {
               </FormGroup>
 
               <FormGroup className="form-group-custom">
-                <Label className="form-label-custom">
-                  Confirm Password
-                </Label>
+                <Label className="form-label-custom">Confirm Password</Label>
                 <Input
                   type="password"
                   value={confirmPassword}
